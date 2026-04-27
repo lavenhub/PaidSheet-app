@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background -->
+  <rect width="512" height="512" fill="#236d00" rx="80"/>
+  <!-- Outer coin ring -->
+  <circle cx="256" cy="256" r="155" fill="none" stroke="#68b946" stroke-width="18"/>
+  <!-- Rupee symbol ₹ -->
+  <text
+    x="256"
+    y="210"
+    font-family="Arial, sans-serif"
+    font-size="120"
+    font-weight="700"
+    fill="white"
+    text-anchor="middle"
+    dominant-baseline="middle"
+  >₹</text>
+  <!-- Checkmark badge bottom-right -->
+  <circle cx="370" cy="370" r="70" fill="#68b946"/>
+  <polyline
+    points="335,370 358,394 405,345"
+    fill="none"
+    stroke="white"
+    stroke-width="16"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+</svg>

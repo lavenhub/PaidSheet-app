@@ -21,11 +21,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          # Only use npm cache if package-lock.json exists
-          cache: ${{ hashFiles('package-lock.json') != '' && 'npm' || '' }}
 
       - name: Install dependencies
-        # Use npm install (works with or without package-lock.json)
         run: npm install
 
       - name: Build web app
@@ -43,16 +40,16 @@ jobs:
       - name: Initialize Capacitor Android
         run: |
           if [ -d "android" ]; then
-            echo "✅ Android platform exists — running cap sync"
+            echo "Android platform exists — syncing"
             npx cap sync android
           else
-            echo "➕ Adding Android platform"
+            echo "Adding Android platform"
             npx cap add android
             npx cap sync android
           fi
 
       - name: Generate Icons
-        run: node scripts/generate-icons.js || echo "⚠️ Icon generation skipped"
+        run: node scripts/generate-icons.js || echo "Icon generation skipped"
         continue-on-error: true
 
       - name: Grant execute permission for gradlew
@@ -61,26 +58,13 @@ jobs:
       - name: Build Debug APK
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug --no-daemon
 
-      - name: Build Release AAB (unsigned)
+      - name: Build Release AAB
         run: |
           cd android
           ./gradlew bundleRelease --no-daemon
         continue-on-error: true
-
-      # ── Sign the AAB for Play Store (only on git tags like v1.0.0) ───────────
-      - name: Sign Release AAB
-        if: startsWith(github.ref, 'refs/tags/v') && secrets.ANDROID_SIGNING_KEY != ''
-        uses: r0adkll/sign-android-release@v1
-        with:
-          releaseDirectory: android/app/build/outputs/bundle/release
-          signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY }}
-          alias: ${{ secrets.ANDROID_ALIAS }}
-          keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        env:
-          BUILD_TOOLS_VERSION: '34.0.0'
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -100,14 +84,27 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      # ── Auto-upload to Play Store on tagged release ──────────────────────────
-      - name: Upload to Google Play (Internal Testing)
-        if: startsWith(github.ref, 'refs/tags/v') && secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON != ''
+      # ── Only runs on git tags (v1.0.0) AND if signing secrets are configured ──
+      - name: Sign Release AAB
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: r0adkll/sign-android-release@v1
+        continue-on-error: true
+        with:
+          releaseDirectory: android/app/build/outputs/bundle/release
+          signingKeyBase64: ${{ secrets.ANDROID_SIGNING_KEY }}
+          alias: ${{ secrets.ANDROID_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_KEY_STORE_PASSWORD }}
+          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        env:
+          BUILD_TOOLS_VERSION: '34.0.0'
+
+      - name: Upload to Google Play
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: r0adkll/upload-google-play@v1
+        continue-on-error: true
         with:
           serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: com.paidsheet.app
           releaseFiles: android/app/build/outputs/bundle/release/*.aab
           track: internal
           status: completed
-          changesNotSentForReview: true

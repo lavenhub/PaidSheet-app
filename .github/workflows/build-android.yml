@@ -17,15 +17,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
-      - name: Build web app
+      - name: Build web app (Vite)
         run: npm run build
 
       - name: Set up Java 17
@@ -37,33 +37,20 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Initialize Capacitor Android
+      - name: Initialize Android platform (always fresh in CI)
         run: |
-          if [ -d "android" ]; then
-            echo "Android platform exists — syncing"
-            npx cap sync android
-          else
-            echo "Adding Android platform"
-            npx cap add android
-            npx cap sync android
-          fi
-
-      - name: Generate Icons
-        run: node scripts/generate-icons.js || echo "Icon generation skipped"
-        continue-on-error: true
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x android/gradlew
+          # Always regenerate to ensure gradlew and all Gradle files are present
+          rm -rf android
+          npx cap add android
+          npx cap sync android
+          chmod +x android/gradlew
+          echo "✅ Android platform ready, gradlew: $(ls -la android/gradlew)"
 
       - name: Build Debug APK
-        run: |
-          cd android
-          ./gradlew assembleDebug --no-daemon
+        run: cd android && ./gradlew assembleDebug --no-daemon
 
       - name: Build Release AAB
-        run: |
-          cd android
-          ./gradlew bundleRelease --no-daemon
+        run: cd android && ./gradlew bundleRelease --no-daemon
         continue-on-error: true
 
       - name: Upload Debug APK
@@ -84,8 +71,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      # ── Only runs on git tags (v1.0.0) AND if signing secrets are configured ──
-      - name: Sign Release AAB
+      - name: Sign AAB (tagged releases only)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: r0adkll/sign-android-release@v1
         continue-on-error: true
@@ -98,7 +84,7 @@ jobs:
         env:
           BUILD_TOOLS_VERSION: '34.0.0'
 
-      - name: Upload to Google Play
+      - name: Upload to Google Play (tagged releases only)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: r0adkll/upload-google-play@v1
         continue-on-error: true

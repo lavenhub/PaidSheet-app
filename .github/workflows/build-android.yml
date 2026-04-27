@@ -21,10 +21,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          # Only use npm cache if package-lock.json exists
+          cache: ${{ hashFiles('package-lock.json') != '' && 'npm' || '' }}
 
       - name: Install dependencies
-        run: npm ci
+        # Use npm install (works with or without package-lock.json)
+        run: npm install
 
       - name: Build web app
         run: npm run build
@@ -41,29 +43,25 @@ jobs:
       - name: Initialize Capacitor Android
         run: |
           if [ -d "android" ]; then
-            echo "✅ Android platform already exists — running cap sync"
+            echo "✅ Android platform exists — running cap sync"
             npx cap sync android
           else
-            echo "➕ Adding Android platform for the first time"
+            echo "➕ Adding Android platform"
             npx cap add android
             npx cap sync android
           fi
 
-      - name: Generate Icons (skip if sharp not available in CI)
-        run: |
-          if [ -f "scripts/generate-icons.js" ]; then
-            node scripts/generate-icons.js || echo "Icon generation skipped"
-          fi
+      - name: Generate Icons
+        run: node scripts/generate-icons.js || echo "⚠️ Icon generation skipped"
         continue-on-error: true
 
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
-        working-directory: .
 
       - name: Build Debug APK
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Build Release AAB (unsigned)
         run: |
@@ -71,9 +69,9 @@ jobs:
           ./gradlew bundleRelease --no-daemon
         continue-on-error: true
 
-      # ── Sign the AAB for Play Store ──────────────────────────────────────────
+      # ── Sign the AAB for Play Store (only on git tags like v1.0.0) ───────────
       - name: Sign Release AAB
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && secrets.ANDROID_SIGNING_KEY != ''
         uses: r0adkll/sign-android-release@v1
         with:
           releaseDirectory: android/app/build/outputs/bundle/release
@@ -86,9 +84,11 @@ jobs:
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: paidsheet-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: warn
           retention-days: 30
 
       - name: Upload Release AAB
@@ -97,11 +97,12 @@ jobs:
         with:
           name: paidsheet-release-aab
           path: android/app/build/outputs/bundle/release/
+          if-no-files-found: warn
           retention-days: 30
 
-      # ── Auto-upload to Play Store on tagged release ───────────────────────────
+      # ── Auto-upload to Play Store on tagged release ──────────────────────────
       - name: Upload to Google Play (Internal Testing)
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON != ''
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
